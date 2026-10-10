@@ -88,10 +88,12 @@ file(GLOB_RECURSE WWHD_ENGINE_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/runtime/src/*.m"
 )
 
-# iOS build cannot compile macOS-only UI/input files.
+# iOS build cannot compile macOS-only UI/input files and desktop Metal backend pieces
+# that depend on AppKit or Wii U Latte internals unavailable in the iOS SDK.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/(menu|input)\\.mm$")
   list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/controls_ui\\.mm$")
+  list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/(metal_main|metal_draw|metal_surfaces|overlay_appkit)\\.mm$")
 endif()
 
 # Fallback stub if no engine sources are present (for CI/build scaffolding)
