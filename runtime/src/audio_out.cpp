@@ -108,7 +108,7 @@ void init() {
 #if defined(__APPLE__) && !defined(WWHD_SDL_HOST)
     AudioComponentDescription desc{};
     desc.componentType = kAudioUnitType_Output;
-    desc.componentSubType = kAudioUnitSubType_DefaultOutput;
+    desc.componentSubType = kAudioUnitSubType_GenericOutput;
     desc.componentManufacturer = kAudioUnitManufacturer_Apple;
     AudioComponent comp = AudioComponentFindNext(nullptr, &desc);
     if (!comp || AudioComponentInstanceNew(comp, &g_unit) != noErr) {
