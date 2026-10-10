@@ -88,6 +88,12 @@ file(GLOB_RECURSE WWHD_ENGINE_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/runtime/src/*.m"
 )
 
+# iOS build cannot compile macOS-only UI/input files.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/(menu|input)\\.mm$")
+  list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/controls_ui\\.mm$")
+endif()
+
 # Fallback stub if no engine sources are present (for CI/build scaffolding)
 if(NOT WWHD_ENGINE_SOURCES AND NOT GEN_SOURCES)
   message(STATUS "Warning: No generated code found. The app will require user-provided game files at runtime.")
