@@ -79,7 +79,10 @@ file(GLOB GEN_SOURCES CONFIGURE_DEPENDS ${GEN_DIR}/code_*.c)
 if(NOT GEN_SOURCES)
   if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/gen/cking.cpp")
     # Code exists, use it
-else()
+  else()
     message(STATUS "Warning: No generated code found. The app will require user-provided game files at runtime.")
     # Create a minimal stub or skip compilation
+  endif()
 endif()
+
+# Continue with the rest of the project configuration below...
