@@ -90,16 +90,18 @@ file(GLOB_RECURSE WWHD_ENGINE_SOURCES CONFIGURE_DEPENDS
 
 # iOS build cannot compile macOS-only UI/input files and desktop Metal backend pieces
 # that depend on AppKit or Wii U Latte internals unavailable in the iOS SDK.
+# Vulkan is also not available on iOS.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/(menu|input)\\.mm$")
   list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/controls_ui\\.mm$")
   list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/(metal_main|metal_draw|metal_surfaces|overlay_appkit|quit_prompt|shader_headstart|text_input_appkit)\\.mm$")
+  list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/vulkan/.*\\.(cpp|h)$")
 endif()
 
 # Fallback stub if no engine sources are present (for CI/build scaffolding)
 if(NOT WWHD_ENGINE_SOURCES AND NOT GEN_SOURCES)
   message(STATUS "Warning: No generated code found. The app will require user-provided game files at runtime.")
-  set(WWHD_ENGINE_STUB "${CMAKE_BINARY_DIR}/wwhd_engine_stub.cpp")
+  set(WWHD_ENGINE_STUB "${CMAKE_BINARY_BINARY_DIR}/wwhd_engine_stub.cpp")
   file(WRITE "${WWHD_ENGINE_STUB}" "extern \"C\" int wwhd_engine_stub() { return 0; }\n")
   set(WWHD_ENGINE_SOURCES "${WWHD_ENGINE_STUB}")
 endif()
