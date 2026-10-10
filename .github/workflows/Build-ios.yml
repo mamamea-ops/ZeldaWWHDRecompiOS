@@ -53,13 +53,20 @@ jobs:
           brew install cmake ninja python@3.12 zstd xcodegen
           python3 --version
 
+      - name: Generate recompiled game code
+        shell: bash
+        run: |
+          set -eux
+          test -f game/code/cking.rpx
+          mkdir -p build/gen
+          python3 tools/recomp/recomp.py game/code/cking.rpx build/gen
+
       - name: Build game engine as iOS library
         shell: bash
         run: |
           set -eux
           mkdir -p build/ios
-          cd build/ios
-          cmake ../.. \
+          cmake -S . -B build/ios \
             -G Ninja \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT="$(xcrun --sdk iphoneos --show-sdk-path)" \
@@ -67,7 +74,7 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
             -DCMAKE_BUILD_TYPE=Release \
             -DWWHD_RENDERER=METAL
-          cmake --build . --target wwhd_engine
+          cmake --build build/ios --target wwhd_engine
 
       - name: Create iOS app scaffolding
         shell: bash
@@ -350,7 +357,7 @@ jobs:
 
           cat > ios/ZeldaWWHD/Resources/Info.plist <<'EOFPLIST'
           <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDPLIST-1.0.dtd">
           <plist version="1.0">
           <dict>
               <key>CFBundleDevelopmentRegion</key>
