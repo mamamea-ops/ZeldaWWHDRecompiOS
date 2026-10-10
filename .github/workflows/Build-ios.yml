@@ -57,9 +57,23 @@ jobs:
         shell: bash
         run: |
           set -eux
-          test -f game/code/cking.rpx
-          mkdir -p build/gen
-          python3 tools/recomp/recomp.py game/code/cking.rpx build/gen
+          if [ -f game/code/cking.rpx ]; then
+            mkdir -p build/gen
+            python3 tools/recomp/recomp.py game/code/cking.rpx build/gen
+          else
+            echo "WARNING: game/code/cking.rpx not found."
+            echo "This build does not ship proprietary game files."
+            echo "Users must dump their own USA Zelda Wind Waker HD files from a modded Wii U."
+            echo ""
+            echo "Required files to dump from your modded Wii U:"
+            echo "  • USA Zelda Wind Waker HD disc image (WUD/WUX format)"
+            echo "  • USA disc key (WUD/WUX only)"
+            echo "  • USA Wii U common key (WUD/WUX)"
+            echo ""
+            echo "The app will provide file/folder pickers at runtime for users to supply their dumped files."
+            mkdir -p build/gen
+            touch build/gen/.placeholder
+          fi
 
       - name: Build game engine as iOS library
         shell: bash
@@ -170,16 +184,403 @@ jobs:
           }
           @end
 
-          @interface DocumentPickerDelegate : NSObject <UIDocumentPickerDelegate>
-          @property (nonatomic, copy) void (^completionHandler)(NSURL *);
+          @interface SetupViewController : UIViewController <UIDocumentPickerDelegate>
+          @property (nonatomic, strong) UILabel *statusLabel;
+          @property (nonatomic, strong) NSString *selectedGameImagePath;
+          @property (nonatomic, strong) NSString *selectedDiscKeyPath;
+          @property (nonatomic, strong) NSString *selectedCommonKeyPath;
+          @property (nonatomic) BOOL useFolder;
+          @property (nonatomic, strong) NSString *selectedFolderPath;
+          @property (nonatomic, strong) UIButton *startButton;
+          - (void)setupUI;
+          - (void)pickGameImage;
+          - (void)pickDiscKey;
+          - (void)pickCommonKey;
+          - (void)pickFolder;
+          - (void)startGame;
+          - (void)updateStatusLabel;
           @end
 
-          @implementation DocumentPickerDelegate
+          @implementation SetupViewController
+
+          - (void)viewDidLoad {
+              [super viewDidLoad];
+              self.view.backgroundColor = [UIColor blackColor];
+              self.useFolder = NO;
+              [self setupUI];
+          }
+
+          - (void)setupUI {
+              UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:self.view.bounds];
+              scrollView.backgroundColor = [UIColor blackColor];
+              [self.view addSubview:scrollView];
+
+              UIView *contentView = [[UIView alloc] init];
+              contentView.backgroundColor = [UIColor blackColor];
+              [scrollView addSubview:contentView];
+
+              // Title
+              UILabel *titleLabel = [[UILabel alloc] init];
+              titleLabel.text = @"Zelda Wind Waker HD";
+              titleLabel.textColor = [UIColor whiteColor];
+              titleLabel.font = [UIFont boldSystemFontOfSize:28];
+              titleLabel.textAlignment = NSTextAlignmentCenter;
+              [contentView addSubview:titleLabel];
+
+              // Subtitle
+              UILabel *subtitleLabel = [[UILabel alloc] init];
+              subtitleLabel.text = @"Setup Required";
+              subtitleLabel.textColor = [UIColor systemGrayColor];
+              subtitleLabel.font = [UIFont systemFontOfSize:16];
+              subtitleLabel.textAlignment = NSTextAlignmentCenter;
+              [contentView addSubview:subtitleLabel];
+
+              // Instructions
+              UILabel *instructionLabel = [[UILabel alloc] init];
+              instructionLabel.text = @"You must dump the following from your modded Wii U:\n\n📀 USA Zelda Wind Waker HD disc image (WUD/WUX)\n🔑 USA disc key (WUD/WUX only)\n🔐 USA Wii U common key (WUD/WUX)";
+              instructionLabel.textColor = [UIColor lightGrayColor];
+              instructionLabel.font = [UIFont systemFontOfSize:14];
+              instructionLabel.numberOfLines = 0;
+              instructionLabel.textAlignment = NSTextAlignmentCenter;
+              [contentView addSubview:instructionLabel];
+
+              // Legal disclaimer
+              UIView *disclaimerView = [[UIView alloc] init];
+              disclaimerView.backgroundColor = [UIColor systemRedColor];
+              disclaimerView.layer.cornerRadius = 8;
+              [contentView addSubview:disclaimerView];
+
+              UILabel *legalLabel = [[UILabel alloc] init];
+              legalLabel.text = @"⚠️  LEGAL: You may only use files dumped from a Wii U you own. Distributing or using game files without ownership is illegal.";
+              legalLabel.textColor = [UIColor whiteColor];
+              legalLabel.font = [UIFont systemFontOfSize:12];
+              legalLabel.numberOfLines = 0;
+              legalLabel.textAlignment = NSTextAlignmentCenter;
+              [disclaimerView addSubview:legalLabel];
+
+              // Mode selection
+              UILabel *modeLabel = [[UILabel alloc] init];
+              modeLabel.text = @"📂 Select Setup Mode:";
+              modeLabel.textColor = [UIColor whiteColor];
+              modeLabel.font = [UIFont boldSystemFontOfSize:16];
+              [contentView addSubview:modeLabel];
+
+              // Folder mode button
+              UIButton *folderButton = [[UIButton alloc] init];
+              [folderButton setTitle:@"📁 Pick Folder with All Files" forState:UIControlStateNormal];
+              [folderButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+              folderButton.backgroundColor = [UIColor systemBlueColor];
+              folderButton.layer.cornerRadius = 8;
+              folderButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+              [folderButton addTarget:self action:@selector(pickFolder) forControlEvents:UIControlEventTouchUpInside];
+              [contentView addSubview:folderButton];
+
+              UILabel *folderDescLabel = [[UILabel alloc] init];
+              folderDescLabel.text = @"Select a folder containing cking.wud/wux, disc_key.bin, and common_key.bin";
+              folderDescLabel.textColor = [UIColor systemGrayColor];
+              folderDescLabel.font = [UIFont systemFontOfSize:12];
+              folderDescLabel.numberOfLines = 0;
+              folderDescLabel.textAlignment = NSTextAlignmentCenter;
+              [contentView addSubview:folderDescLabel];
+
+              // Divider
+              UIView *divider = [[UIView alloc] init];
+              divider.backgroundColor = [UIColor systemGrayColor];
+              [contentView addSubview:divider];
+
+              UILabel *orLabel = [[UILabel alloc] init];
+              orLabel.text = @"OR";
+              orLabel.textColor = [UIColor systemGrayColor];
+              orLabel.font = [UIFont boldSystemFontOfSize:14];
+              orLabel.textAlignment = NSTextAlignmentCenter;
+              [contentView addSubview:orLabel];
+
+              // Individual files mode
+              UILabel *filesLabel = [[UILabel alloc] init];
+              filesLabel.text = @"📋 Pick Files Individually:";
+              filesLabel.textColor = [UIColor whiteColor];
+              filesLabel.font = [UIFont boldSystemFontOfSize:16];
+              [contentView addSubview:filesLabel];
+
+              // Game image button
+              UIButton *gameButton = [[UIButton alloc] init];
+              [gameButton setTitle:@"📀 Select Game Image (WUD/WUX)" forState:UIControlStateNormal];
+              [gameButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+              gameButton.backgroundColor = [UIColor systemGreenColor];
+              gameButton.layer.cornerRadius = 8;
+              gameButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+              [gameButton addTarget:self action:@selector(pickGameImage) forControlEvents:UIControlEventTouchUpInside];
+              [contentView addSubview:gameButton];
+
+              // Disc key button
+              UIButton *discKeyButton = [[UIButton alloc] init];
+              [discKeyButton setTitle:@"🔑 Select Disc Key (disc_key.bin)" forState:UIControlStateNormal];
+              [discKeyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+              discKeyButton.backgroundColor = [UIColor systemOrangeColor];
+              discKeyButton.layer.cornerRadius = 8;
+              discKeyButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+              [discKeyButton addTarget:self action:@selector(pickDiscKey) forControlEvents:UIControlEventTouchUpInside];
+              [contentView addSubview:discKeyButton];
+
+              // Common key button
+              UIButton *commonKeyButton = [[UIButton alloc] init];
+              [commonKeyButton setTitle:@"🔐 Select Common Key (common_key.bin)" forState:UIControlStateNormal];
+              [commonKeyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+              commonKeyButton.backgroundColor = [UIColor systemPurpleColor];
+              commonKeyButton.layer.cornerRadius = 8;
+              commonKeyButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+              [commonKeyButton addTarget:self action:@selector(pickCommonKey) forControlEvents:UIControlEventTouchUpInside];
+              [contentView addSubview:commonKeyButton];
+
+              // Status label
+              self.statusLabel = [[UILabel alloc] init];
+              self.statusLabel.text = @"Status: No files selected";
+              self.statusLabel.textColor = [UIColor systemYellowColor];
+              self.statusLabel.font = [UIFont systemFontOfSize:13];
+              self.statusLabel.numberOfLines = 0;
+              self.statusLabel.textAlignment = NSTextAlignmentCenter;
+              [contentView addSubview:self.statusLabel];
+
+              // Start button
+              self.startButton = [[UIButton alloc] init];
+              [self.startButton setTitle:@"▶️ Start Game" forState:UIControlStateNormal];
+              [self.startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+              self.startButton.backgroundColor = [UIColor systemRedColor];
+              self.startButton.layer.cornerRadius = 8;
+              self.startButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+              [self.startButton addTarget:self action:@selector(startGame) forControlEvents:UIControlEventTouchUpInside];
+              self.startButton.alpha = 0.5;
+              self.startButton.enabled = NO;
+              [contentView addSubview:self.startButton];
+
+              // Layout using AutoLayout
+              scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+              contentView.translatesAutoresizingMaskIntoConstraints = NO;
+              [contentView.widthAnchor constraintEqualToAnchor:scrollView.widthAnchor].active = YES;
+
+              CGFloat padding = 20;
+              CGFloat buttonHeight = 50;
+              CGFloat spacing = 12;
+
+              [NSLayoutConstraint activateConstraints:@[
+                  [scrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+                  [scrollView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+                  [scrollView.leftAnchor constraintEqualToAnchor:self.view.leftAnchor],
+                  [scrollView.rightAnchor constraintEqualToAnchor:self.view.rightAnchor],
+
+                  [contentView.topAnchor constraintEqualToAnchor:scrollView.topAnchor constant:padding],
+                  [contentView.bottomAnchor constraintEqualToAnchor:scrollView.bottomAnchor constant:-padding],
+                  [contentView.leftAnchor constraintEqualToAnchor:scrollView.leftAnchor constant:16],
+                  [contentView.rightAnchor constraintEqualToAnchor:scrollView.rightAnchor constant:-16],
+              ]];
+
+              titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              instructionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              disclaimerView.translatesAutoresizingMaskIntoConstraints = NO;
+              legalLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              modeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              folderButton.translatesAutoresizingMaskIntoConstraints = NO;
+              folderDescLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              divider.translatesAutoresizingMaskIntoConstraints = NO;
+              orLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              filesLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              gameButton.translatesAutoresizingMaskIntoConstraints = NO;
+              discKeyButton.translatesAutoresizingMaskIntoConstraints = NO;
+              commonKeyButton.translatesAutoresizingMaskIntoConstraints = NO;
+              self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+              self.startButton.translatesAutoresizingMaskIntoConstraints = NO;
+
+              [NSLayoutConstraint activateConstraints:@[
+                  [titleLabel.topAnchor constraintEqualToAnchor:contentView.topAnchor],
+                  [titleLabel.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [titleLabel.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:4],
+                  [subtitleLabel.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [subtitleLabel.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [instructionLabel.topAnchor constraintEqualToAnchor:subtitleLabel.bottomAnchor constant:16],
+                  [instructionLabel.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [instructionLabel.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [disclaimerView.topAnchor constraintEqualToAnchor:instructionLabel.bottomAnchor constant:16],
+                  [disclaimerView.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [disclaimerView.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [legalLabel.topAnchor constraintEqualToAnchor:disclaimerView.topAnchor constant:12],
+                  [legalLabel.bottomAnchor constraintEqualToAnchor:disclaimerView.bottomAnchor constant:-12],
+                  [legalLabel.leftAnchor constraintEqualToAnchor:disclaimerView.leftAnchor constant:12],
+                  [legalLabel.rightAnchor constraintEqualToAnchor:disclaimerView.rightAnchor constant:-12],
+
+                  [modeLabel.topAnchor constraintEqualToAnchor:disclaimerView.bottomAnchor constant:20],
+                  [modeLabel.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [modeLabel.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [folderButton.topAnchor constraintEqualToAnchor:modeLabel.bottomAnchor constant:spacing],
+                  [folderButton.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [folderButton.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+                  [folderButton.heightAnchor constraintEqualToConstant:buttonHeight],
+
+                  [folderDescLabel.topAnchor constraintEqualToAnchor:folderButton.bottomAnchor constant:8],
+                  [folderDescLabel.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [folderDescLabel.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [divider.topAnchor constraintEqualToAnchor:folderDescLabel.bottomAnchor constant:16],
+                  [divider.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [divider.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+                  [divider.heightAnchor constraintEqualToConstant:1],
+
+                  [orLabel.topAnchor constraintEqualToAnchor:divider.bottomAnchor constant:8],
+                  [orLabel.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [orLabel.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [filesLabel.topAnchor constraintEqualToAnchor:orLabel.bottomAnchor constant:12],
+                  [filesLabel.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [filesLabel.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [gameButton.topAnchor constraintEqualToAnchor:filesLabel.bottomAnchor constant:spacing],
+                  [gameButton.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [gameButton.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+                  [gameButton.heightAnchor constraintEqualToConstant:buttonHeight],
+
+                  [discKeyButton.topAnchor constraintEqualToAnchor:gameButton.bottomAnchor constant:spacing],
+                  [discKeyButton.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [discKeyButton.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+                  [discKeyButton.heightAnchor constraintEqualToConstant:buttonHeight],
+
+                  [commonKeyButton.topAnchor constraintEqualToAnchor:discKeyButton.bottomAnchor constant:spacing],
+                  [commonKeyButton.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [commonKeyButton.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+                  [commonKeyButton.heightAnchor constraintEqualToConstant:buttonHeight],
+
+                  [self.statusLabel.topAnchor constraintEqualToAnchor:commonKeyButton.bottomAnchor constant:20],
+                  [self.statusLabel.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [self.statusLabel.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+
+                  [self.startButton.topAnchor constraintEqualToAnchor:self.statusLabel.bottomAnchor constant:20],
+                  [self.startButton.leftAnchor constraintEqualToAnchor:contentView.leftAnchor],
+                  [self.startButton.rightAnchor constraintEqualToAnchor:contentView.rightAnchor],
+                  [self.startButton.heightAnchor constraintEqualToConstant:buttonHeight],
+                  [self.startButton.bottomAnchor constraintEqualToAnchor:contentView.bottomAnchor]
+              ]];
+          }
+
+          - (void)pickFolder {
+              UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
+                  initForOpeningContentTypes:@[UTTypeFolder] asCopy:NO];
+              picker.delegate = self;
+              picker.allowsMultipleSelection = NO;
+              [self presentViewController:picker animated:YES completion:nil];
+          }
+
+          - (void)pickGameImage {
+              UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
+                  initForOpeningContentTypes:@[UTTypeData] asCopy:NO];
+              picker.delegate = self;
+              picker.allowsMultipleSelection = NO;
+              [self presentViewController:picker animated:YES completion:nil];
+          }
+
+          - (void)pickDiscKey {
+              UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
+                  initForOpeningContentTypes:@[UTTypeData] asCopy:NO];
+              picker.delegate = self;
+              picker.allowsMultipleSelection = NO;
+              [self presentViewController:picker animated:YES completion:nil];
+          }
+
+          - (void)pickCommonKey {
+              UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
+                  initForOpeningContentTypes:@[UTTypeData] asCopy:NO];
+              picker.delegate = self;
+              picker.allowsMultipleSelection = NO;
+              [self presentViewController:picker animated:YES completion:nil];
+          }
+
           - (void)documentPicker:(UIDocumentPickerViewController *)controller
               didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
-              if (urls.count > 0 && self.completionHandler) {
-                  self.completionHandler(urls[0]);
+              if (urls.count == 0) return;
+              NSURL *url = urls[0];
+              NSString *path = [url path];
+
+              // Check if it's a directory
+              BOOL isDir = NO;
+              [[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&isDir];
+              if (isDir) {
+                  self.useFolder = YES;
+                  self.selectedFolderPath = path;
+                  self.selectedGameImagePath = nil;
+                  self.selectedDiscKeyPath = nil;
+                  self.selectedCommonKeyPath = nil;
+                  [self updateStatusLabel];
+                  return;
               }
+
+              // File selection - determine which file based on name
+              NSString *filename = [path lastPathComponent];
+              NSString *lowerFilename = filename.lowercaseString;
+              
+              if ([lowerFilename hasSuffix:@".wud"] || [lowerFilename hasSuffix:@".wux"]) {
+                  self.useFolder = NO;
+                  self.selectedGameImagePath = path;
+              } else if ([lowerFilename isEqualToString:@"disc_key.bin"]) {
+                  self.useFolder = NO;
+                  self.selectedDiscKeyPath = path;
+              } else if ([lowerFilename isEqualToString:@"common_key.bin"]) {
+                  self.useFolder = NO;
+                  self.selectedCommonKeyPath = path;
+              }
+              
+              [self updateStatusLabel];
+          }
+
+          - (void)updateStatusLabel {
+              if (self.useFolder && self.selectedFolderPath) {
+                  self.statusLabel.text = [NSString stringWithFormat:@"✅ Folder selected: %@", [self.selectedFolderPath lastPathComponent]];
+                  self.statusLabel.textColor = [UIColor systemGreenColor];
+                  self.startButton.enabled = YES;
+                  self.startButton.alpha = 1.0;
+              } else if (self.selectedGameImagePath && self.selectedDiscKeyPath && self.selectedCommonKeyPath) {
+                  self.statusLabel.text = [NSString stringWithFormat:@"✅ All files selected:\n%@\ndisc_key.bin\ncommon_key.bin", 
+                      [self.selectedGameImagePath lastPathComponent]];
+                  self.statusLabel.textColor = [UIColor systemGreenColor];
+                  self.startButton.enabled = YES;
+                  self.startButton.alpha = 1.0;
+              } else {
+                  NSMutableString *status = [[NSMutableString alloc] initWithString:@"📋 Status:\n"];
+                  [status appendString:self.selectedGameImagePath ? [NSString stringWithFormat:@"✓ Game: %@\n", [self.selectedGameImagePath lastPathComponent]] : @"○ Game image\n"];
+                  [status appendString:self.selectedDiscKeyPath ? @"✓ Disc Key\n" : @"○ Disc key\n"];
+                  [status appendString:self.selectedCommonKeyPath ? @"✓ Common Key" : @"○ Common key"];
+                  
+                  self.statusLabel.text = status;
+                  self.statusLabel.textColor = [UIColor systemYellowColor];
+                  self.startButton.enabled = NO;
+                  self.startButton.alpha = 0.5;
+              }
+          }
+
+          - (void)startGame {
+              NSString *folderPath = nil;
+              
+              if (self.useFolder && self.selectedFolderPath) {
+                  folderPath = self.selectedFolderPath;
+              } else if (self.selectedGameImagePath && self.selectedDiscKeyPath && self.selectedCommonKeyPath) {
+                  folderPath = [self.selectedGameImagePath stringByDeletingLastPathComponent];
+              } else {
+                  UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Missing Files"
+                      message:@"Please select either a folder with all files or all three individual files (game image, disc key, and common key)."
+                      preferredStyle:UIAlertControllerStyleAlert];
+                  [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                  [self presentViewController:alert animated:YES completion:nil];
+                  return;
+              }
+
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+                  int argc = 2;
+                  const char *argv[] = { "wwhd", [folderPath UTF8String], NULL };
+                  wwhd_main(argc, (char**)argv);
+              });
           }
           @end
 
@@ -192,9 +593,9 @@ jobs:
 
           - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
               self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
-              UIViewController *vc = [[UIViewController alloc] init];
-              vc.view.backgroundColor = [UIColor blackColor];
-              self.window.rootViewController = vc;
+              
+              SetupViewController *setupVC = [[SetupViewController alloc] init];
+              self.window.rootViewController = setupVC;
               self.window.backgroundColor = [UIColor blackColor];
               [self.window makeKeyAndVisible];
 
@@ -203,37 +604,7 @@ jobs:
               NSString *ratio = @"10:7";
               wwhd_set_aspect_ratio([ratio UTF8String]);
 
-              [self presentGameFolderPicker:vc];
-
               return YES;
-          }
-
-          - (void)presentGameFolderPicker:(UIViewController *)parentVC {
-              if (@available(iOS 14, *)) {
-                  UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
-                      initForOpeningContentTypes:@[UTTypeFolder] asCopy:NO];
-                  DocumentPickerDelegate *delegate = [[DocumentPickerDelegate alloc] init];
-                  picker.delegate = delegate;
-                  delegate.completionHandler = ^(NSURL *selectedURL) {
-                      [self startGameWithFolderPath:[selectedURL path]];
-                  };
-                  [parentVC presentViewController:picker animated:YES completion:nil];
-              } else {
-                  [self startGameWithFolderPath:nil];
-              }
-          }
-
-          - (void)startGameWithFolderPath:(NSString *)folderPath {
-              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-                  int argc = 1;
-                  const char *argv[] = { "wwhd", NULL };
-                  if (folderPath) {
-                      argc = 2;
-                      const char *path = [folderPath UTF8String];
-                      argv[1] = path;
-                  }
-                  wwhd_main(argc, (char**)argv);
-              });
           }
 
           @end
@@ -399,7 +770,7 @@ jobs:
               <key>LSSupportsOpeningDocumentsInPlace</key>
               <true/>
               <key>NSDocumentsFolderUsageDescription</key>
-              <string>Wind Waker HD needs access to your game files folder</string>
+              <string>Wind Waker HD needs access to your dumped game files folder to run</string>
           </dict>
           </plist>
           EOFPLIST
