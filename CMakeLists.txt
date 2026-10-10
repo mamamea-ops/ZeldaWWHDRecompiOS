@@ -84,5 +84,3 @@ if(NOT GEN_SOURCES)
     # Create a minimal stub or skip compilation
   endif()
 endif()
-
-# Continue with the rest of the project configuration below...
