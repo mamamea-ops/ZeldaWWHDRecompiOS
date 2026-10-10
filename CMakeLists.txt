@@ -93,7 +93,7 @@ file(GLOB_RECURSE WWHD_ENGINE_SOURCES CONFIGURE_DEPENDS
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/(menu|input)\\.mm$")
   list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/controls_ui\\.mm$")
-  list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/(metal_main|metal_draw|metal_surfaces|overlay_appkit)\\.mm$")
+  list(FILTER WWHD_ENGINE_SOURCES EXCLUDE REGEX "/runtime/src/gfx/(metal_main|metal_draw|metal_surfaces|overlay_appkit|quit_prompt|shader_headstart)\\.mm$")
 endif()
 
 # Fallback stub if no engine sources are present (for CI/build scaffolding)
