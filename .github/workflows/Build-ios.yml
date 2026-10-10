@@ -53,6 +53,22 @@ jobs:
           brew install cmake ninja python@3.12 zstd xcodegen
           python3 --version
 
+      - name: Build game engine as iOS library
+        shell: bash
+        run: |
+          set -eux
+          mkdir -p build/ios
+          cd build/ios
+          cmake ../.. \
+            -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT="$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWWHD_RENDERER=METAL
+          cmake --build . --target wwhd_engine
+
       - name: Create iOS app scaffolding
         shell: bash
         run: |
@@ -419,6 +435,9 @@ jobs:
                 SUPPORTS_MACCATALYST: NO
                 INFOPLIST_FILE: Resources/Info.plist
                 ENABLE_BITCODE: NO
+                HEADER_SEARCH_PATHS: $(SRCROOT)/../../../runtime/include $(SRCROOT)/../../../runtime/src $(SRCROOT)/../../../build/ios/gen
+                LIBRARY_SEARCH_PATHS: $(SRCROOT)/../../../build/ios
+                OTHER_LDFLAGS: -lwwhd_engine -framework Metal -framework Foundation
               entitlements:
                 path: Resources/ZeldaWWHD.entitlements
           EOFPROJ
@@ -442,7 +461,10 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
+            CODE_SIGNING_REQUIRED=NO \
+            HEADER_SEARCH_PATHS="$(pwd)/../../runtime/include $(pwd)/../../runtime/src $(pwd)/../../build/ios/gen" \
+            LIBRARY_SEARCH_PATHS="$(pwd)/../../build/ios" \
+            OTHER_LDFLAGS="-L$(pwd)/../../build/ios -lwwhd_engine -framework Metal -framework Foundation"
 
       - name: Create IPA
         shell: bash
